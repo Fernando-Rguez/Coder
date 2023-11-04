@@ -6,32 +6,42 @@ class GeneradorPassword {
       numeros: "0123456789",
       especiales: "!@#$%^&*()_+-=[]{}|;:'\",.<>?"
     };
-    this.contrasenasGeneradas = [];   
+    this.contrasenasGeneradas = this.cargarContrasenasDesdeLocalStorage();
   }
+
+  cargarContrasenasDesdeLocalStorage() {
+    const contrasenasGuardadas = localStorage.getItem("contrasenas");
+    return contrasenasGuardadas ? JSON.parse(contrasenasGuardadas) : [];
+  }
+
+  guardarContrasenasEnLocalStorage() {
+    localStorage.setItem("contrasenas", JSON.stringify(this.contrasenasGeneradas));
+  }
+
   obtenerOpciones() {
     const longitud = parseInt(document.getElementById("longitud").value);
     if (isNaN(longitud) || longitud <= 0) {
       document.getElementById("error-message").textContent = "La longitud de la contraseña debe ser un número positivo.";
       return null;
     }
-    if(longitud >= 101 ){
-      document.getElementById("error-message").textContent = "La longitud de la contraseña debe ser menor a una longitud de 100 caracteres.";
+    if (longitud >= 101) {
+      document.getElementById("error-message").textContent = "La longitud de la contraseña debe ser menor a 100 caracteres.";
       return null;
     }
-    const mayuscula = document.getElementById("mayuscula").checked,
-          numero = document.getElementById("numero").checked,
-          caracteres = document.getElementById("caracteres").checked;
+    const mayuscula = document.getElementById("mayuscula").checked;
+    const numero = document.getElementById("numero").checked;
+    const caracteres = document.getElementById("caracteres").checked;
 
     if (!mayuscula && !numero && !caracteres) {
       document.getElementById("error-message").textContent = "Debe seleccionar al menos un criterio para la contraseña.";
       return null;
     }
 
+    document.getElementById("error-message").textContent = "";
     return { longitud, mayuscula, numero, caracteres };
   }
 
   generarPassword() {
-    document.getElementById("error-message").textContent = ""; 
     const opciones = this.obtenerOpciones();
     if (!opciones) return;
 
@@ -46,26 +56,82 @@ class GeneradorPassword {
       passwordGenerado += caracteresUsados.charAt(aleatorio);
     }
 
-    const fechaHoraActual = new Date(),
-          fecha = fechaHoraActual.toLocaleDateString(),
-          hora = fechaHoraActual.toLocaleTimeString();
+    const fechaHoraActual = new Date();
+    const fecha = fechaHoraActual.toLocaleDateString();
+    const hora = fechaHoraActual.toLocaleTimeString();
 
-    // Muestra la info
-    document.getElementById("contrasena-generada").textContent = `Contraseña Generada: ${passwordGenerado}`;
-    const listaPassword = document.getElementById("lista-contrasenas"),
-          nuevaCont = document.createElement("tr");
-    nuevaCont.innerHTML = `<td>${passwordGenerado}</td><td>${fecha}</td><td>${hora}</td>`;
-    listaPassword.appendChild(nuevaCont);
+    // Generar un identificador único para la contraseña
+    const id = Date.now(); // Puedes usar una marca de tiempo como identificador
 
-    // Restable los valores
+    this.contrasenasGeneradas.push({
+      id: id, // Agregar el identificador
+      contraseña: passwordGenerado,
+      fecha: fecha,
+      hora: hora
+    });
+
+    this.guardarContrasenasEnLocalStorage();
+
+    document.getElementById("contrasena-generada").textContent = `Última Contraseña Generada: ${passwordGenerado}`;
+
+    const listaPassword = document.getElementById("lista-contrasenas");
+    const nuevaCont = listaPassword.insertRow(-1);
+    nuevaCont.setAttribute("data-id", id);
+    const nuevaCelda1 = nuevaCont.insertCell(0);
+    nuevaCelda1.textContent = passwordGenerado;
+    const nuevaCelda2 = nuevaCont.insertCell(1);
+    nuevaCelda2.textContent = fecha;
+    const nuevaCelda3 = nuevaCont.insertCell(2);
+    nuevaCelda3.textContent = hora;
+    const nuevaCelda4 = nuevaCont.insertCell(3);
+    const eliminarBtn = document.createElement("button");
+    eliminarBtn.className = "btn btn-danger btn-sm";
+    eliminarBtn.textContent = "Eliminar";
+    eliminarBtn.onclick = () => this.borrarContrasena(id);
+    nuevaCelda4.appendChild(eliminarBtn);
+
     document.getElementById("longitud").value = "";
     document.getElementById("mayuscula").checked = false;
     document.getElementById("numero").checked = false;
     document.getElementById("caracteres").checked = false;
   }
+
+  borrarContrasena(id) {
+    const index = this.contrasenasGeneradas.findIndex(item => item.id === id);
+
+    if (index !== -1) {
+      this.contrasenasGeneradas.splice(index, 1);
+      this.guardarContrasenasEnLocalStorage();
+    }
+
+    const filaAEliminar = document.querySelector(`#lista-contrasenas tr[data-id="${id}"]`);
+    if (filaAEliminar) {
+      filaAEliminar.remove();
+    }
+  }
 }
 
 const generador = new GeneradorPassword();
+
+generador.contrasenasGeneradas = generador.cargarContrasenasDesdeLocalStorage();
+
+generador.contrasenasGeneradas.forEach((contrasena) => {
+  const listaPassword = document.getElementById("lista-contrasenas");
+  const nuevaCont = listaPassword.insertRow(-1);
+  nuevaCont.setAttribute("data-id", contrasena.id);
+  const nuevaCelda1 = nuevaCont.insertCell(0);
+  nuevaCelda1.textContent = contrasena.contraseña;
+  const nuevaCelda2 = nuevaCont.insertCell(1);
+  nuevaCelda2.textContent = contrasena.fecha;
+  const nuevaCelda3 = nuevaCont.insertCell(2);
+  nuevaCelda3.textContent = contrasena.hora;
+  const nuevaCelda4 = nuevaCont.insertCell(3);
+  const eliminarBtn = document.createElement("button");
+  eliminarBtn.className = "btn btn-danger btn-sm";
+  eliminarBtn.textContent = "Eliminar";
+  eliminarBtn.onclick = () => generador.borrarContrasena(contrasena.id);
+  nuevaCelda4.appendChild(eliminarBtn);
+});
 
 document.getElementById("generarBtn").addEventListener("click", () => {
   generador.generarPassword();
