@@ -1,12 +1,7 @@
 class GeneradorPassword {
   constructor() {
-    this.caracteresPermitidos = {
-      minusculas: "abcdefghijklmnopqrstuvwxyz",
-      mayusculas: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-      numeros: "0123456789",
-      especiales: "!@#$%^&*()_+-=[]{}|;:'\",.<>?"
-    };
     this.contrasenasGeneradas = this.cargarContrasenasDesdeLocalStorage();
+    this.apiKey = 'aeQviv94iFzeyZattE//rg==ZM3l8jb6nNqvgVR7';
   }
 
   cargarContrasenasDesdeLocalStorage() {
@@ -28,128 +23,152 @@ class GeneradorPassword {
       document.getElementById("error-message").textContent = "La longitud de la contraseña debe ser menor a 100 caracteres.";
       return null;
     }
-    const mayuscula = document.getElementById("mayuscula").checked;
-    const numero = document.getElementById("numero").checked;
-    const caracteres = document.getElementById("caracteres").checked;
+    const numero = document.getElementById("numero").checked,
+          caracteres = document.getElementById("caracteres").checked;
 
-    if (!mayuscula && !numero && !caracteres) {
+    if (!numero && !caracteres) {
       document.getElementById("error-message").textContent = "Debe seleccionar al menos un criterio para la contraseña.";
       return null;
     }
 
     document.getElementById("error-message").textContent = "";
-    return { longitud, mayuscula, numero, caracteres };
+    return { longitud, numero, caracteres };
   }
 
-  generarPassword() {
+  async obtenerPasswordDesdeAPI(longitud, excludeNumbers, excludeSpecialChars) {
+        const apiUrl = `https://api.api-ninjas.com/v1/passwordgenerator?length=${longitud}&exclude_numbers=${excludeNumbers}&exclude_special_chars=${excludeSpecialChars}`;
+
+    const requestOptions = {
+      method: 'GET',
+      headers: {
+        'X-Api-Key': this.apiKey,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    try {
+      const response = await fetch(apiUrl, requestOptions);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      //Respuesta del Api
+      mostrarExito();
+      return result.random_password;
+    } catch (error) {
+      mostrarError();
+      console.error('Error al comunicarse con el Api:', error);
+      return null;
+    }
+  }
+
+  async generarPassword() {
     const opciones = this.obtenerOpciones();
     if (!opciones) return;
 
-    let caracteresUsados = "abcdefghijklmnopqrstuvwxyz";
-    if (opciones.mayuscula) caracteresUsados += this.caracteresPermitidos.mayusculas;
-    if (opciones.numero) caracteresUsados += this.caracteresPermitidos.numeros;
-    if (opciones.caracteres) caracteresUsados += this.caracteresPermitidos.especiales;
-
-    let passwordGenerado = "";
-    for (let i = 0; i < opciones.longitud; i++) {
-      const aleatorio = Math.floor(Math.random() * caracteresUsados.length);
-      passwordGenerado += caracteresUsados.charAt(aleatorio);
+    const passwordGenerado = await this.obtenerPasswordDesdeAPI(
+            opciones.longitud,
+            !opciones.numero,
+            !opciones.caracteres
+            );
+    if (!passwordGenerado) {
+      console.error('Error al obtener la contraseña desde la API');
+      return;
     }
 
-    const fechaHoraActual = new Date();
-    const fecha = fechaHoraActual.toLocaleDateString();
-    const hora = fechaHoraActual.toLocaleTimeString();
-
-    // Generar un identificador único para la contraseña
-    const id = Date.now(); // Puedes usar una marca de tiempo como identificador
-
+    const fechaHoraActual = new Date(),
+          fecha = fechaHoraActual.toLocaleDateString(),
+          hora = fechaHoraActual.toLocaleTimeString(),
+          id = Date.now();
     this.contrasenasGeneradas.push({
-      id: id, // Agregar el identificador
+      id: id,
       contraseña: passwordGenerado,
       fecha: fecha,
       hora: hora
     });
-
     this.guardarContrasenasEnLocalStorage();
+    this.actualizarInterfazContrasenaGenerada(passwordGenerado, id, fecha, hora);
+    this.restablecerFormulario();
+  }
 
-    document.getElementById("contrasena-generada").textContent = `Última Contraseña Generada: ${passwordGenerado}`;
-
-    const listaPassword = document.getElementById("lista-contrasenas");
-    const nuevaCont = listaPassword.insertRow(-1);
+  actualizarInterfazContrasenaGenerada(password, id, fecha, hora) {
+    document.getElementById("contrasena-generada").textContent = `Última Contraseña Generada: ${password}`;
+    const listaPassword = document.getElementById("lista-contrasenas"),
+          nuevaCont = listaPassword.insertRow(-1);
     nuevaCont.setAttribute("data-id", id);
-    const nuevaCelda1 = nuevaCont.insertCell(0);
-    nuevaCelda1.textContent = passwordGenerado;
-    const nuevaCelda2 = nuevaCont.insertCell(1);
-    nuevaCelda2.textContent = fecha;
-    const nuevaCelda3 = nuevaCont.insertCell(2);
-    nuevaCelda3.textContent = hora;
-    const nuevaCelda4 = nuevaCont.insertCell(3);
-    const eliminarBtn = document.createElement("button");
-    eliminarBtn.className = "btn btn-danger btn-sm";
-    eliminarBtn.textContent = "Eliminar";
-    eliminarBtn.onclick = () => this.borrarContrasena(id);
-    nuevaCelda4.appendChild(eliminarBtn);
-
+    const celdas = [password, fecha, hora];
+    for (let i = 0; i < celdas.length; i++) {
+      const nuevaCelda = nuevaCont.insertCell(i);
+      nuevaCelda.textContent = celdas[i];
+    }
+    const nuevaCeldaEliminar = nuevaCont.insertCell(3),
+          eliminarBtn = document.createElement("button");
+          eliminarBtn.className = "btn btn-danger btn-sm";
+          eliminarBtn.textContent = "Eliminar";
+          eliminarBtn.onclick = () => this.borrarContrasena(id);
+          nuevaCeldaEliminar.appendChild(eliminarBtn);
+  }
+  restablecerFormulario() {
     document.getElementById("longitud").value = "";
-    document.getElementById("mayuscula").checked = false;
     document.getElementById("numero").checked = false;
     document.getElementById("caracteres").checked = false;
   }
 
   borrarContrasena(id) {
-    const index = this.contrasenasGeneradas.findIndex(item => item.id === id);
-
-    if (index !== -1) {
-      this.contrasenasGeneradas.splice(index, 1);
-      this.guardarContrasenasEnLocalStorage();
-    }
-
-    const filaAEliminar = document.querySelector(`#lista-contrasenas tr[data-id="${id}"]`);
-    if (filaAEliminar) {
-      filaAEliminar.remove();
-    }
+    Swal.fire({
+      title: "¿Estas Seguro de continuar?",
+      text: "La contraseña se eliminara permanentemente!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Sí, Eliminar!",
+      cancelButtonText: "Cancelar"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const index = this.contrasenasGeneradas.findIndex(item => item.id === id);
+        if (index !== -1) {
+          this.contrasenasGeneradas.splice(index, 1);
+          this.guardarContrasenasEnLocalStorage();
+        }
+        const filaAEliminar = document.querySelector(`#lista-contrasenas tr[data-id="${id}"]`);
+        if (filaAEliminar) {
+          filaAEliminar.remove();
+        }
+        Swal.fire({
+          title: "Eliminado!",
+          text: "Contraseña eliminada.",
+          icon: "success"
+        });
+      }
+    });
+    
   }
 }
-
 const generador = new GeneradorPassword();
-
 generador.contrasenasGeneradas = generador.cargarContrasenasDesdeLocalStorage();
-
 generador.contrasenasGeneradas.forEach((contrasena) => {
-  const listaPassword = document.getElementById("lista-contrasenas");
-  const nuevaCont = listaPassword.insertRow(-1);
-  nuevaCont.setAttribute("data-id", contrasena.id);
-  const nuevaCelda1 = nuevaCont.insertCell(0);
-  nuevaCelda1.textContent = contrasena.contraseña;
-  const nuevaCelda2 = nuevaCont.insertCell(1);
-  nuevaCelda2.textContent = contrasena.fecha;
-  const nuevaCelda3 = nuevaCont.insertCell(2);
-  nuevaCelda3.textContent = contrasena.hora;
-  const nuevaCelda4 = nuevaCont.insertCell(3);
-  const eliminarBtn = document.createElement("button");
-  eliminarBtn.className = "btn btn-danger btn-sm";
-  eliminarBtn.textContent = "Eliminar";
-  eliminarBtn.onclick = () => generador.borrarContrasena(contrasena.id);
-  nuevaCelda4.appendChild(eliminarBtn);
+  generador.actualizarInterfazContrasenaGenerada(contrasena.contraseña, contrasena.id, contrasena.fecha, contrasena.hora);
 });
-
 document.getElementById("generarBtn").addEventListener("click", () => {
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('spinner').style.display = 'inline-block';
   generador.generarPassword();
+  setTimeout(function() {
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('spinner').style.display = 'none';
+  }, 2000);
 });
-
 function buscarInfo() {
-  const textoBusqueda = document.getElementById("busqueda").value.toLowerCase();
-  const contrasenas = document.querySelectorAll("#lista-contrasenas tr");
+  const textoBusqueda = document.getElementById("busqueda").value.toLowerCase(),
+        contrasenas = document.querySelectorAll("#lista-contrasenas tr");
   contrasenas.forEach((contrasena) => {
     const contenido = contrasena.textContent.toLowerCase();
-    if (contenido.includes(textoBusqueda)) {
-      contrasena.style.display = "table-row";
-    } else {
-      contrasena.style.display = "none";
-    }
+    contrasena.style.display = contenido.includes(textoBusqueda) ? "table-row" : "none";
   });
 }
-
 function restablecerFiltro() {
   const contrasenas = document.querySelectorAll("#lista-contrasenas tr");
   contrasenas.forEach((contrasena) => {
@@ -159,3 +178,19 @@ function restablecerFiltro() {
 }
 document.getElementById("filtrarBtn").addEventListener("click", buscarInfo);
 document.getElementById("restablecerBtn").addEventListener("click", restablecerFiltro);
+
+//SweetAlerts
+function mostrarExito() {
+  Swal.fire({
+    icon: 'success',
+    title: '¡Éxito!',
+    text: 'Constraseña generada correctamente.',
+  });
+}
+function mostrarError() {
+  Swal.fire({
+    icon: 'error',
+    title: 'Oops...',
+    text: 'Ha ocurrido un Error.',
+  });
+}
